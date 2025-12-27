@@ -14,6 +14,7 @@ import {
     RefreshCw,
 } from 'lucide-react';
 import { useState } from 'react';
+import ThemeToggle from './ThemeToggle';
 
 const navItems = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -73,13 +74,21 @@ export default function Sidebar() {
                     })}
                 </nav>
 
-                {/* Version Info */}
+                {/* Theme Toggle & Version Info */}
                 {!collapsed && (
                     <div className="p-4 border-t border-[var(--border)]">
-                        <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-                            <RefreshCw className="w-3 h-3" />
-                            <span>Hybrid Sync Architecture</span>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                                <RefreshCw className="w-3 h-3" />
+                                <span>Query Sync</span>
+                            </div>
+                            <ThemeToggle />
                         </div>
+                    </div>
+                )}
+                {collapsed && (
+                    <div className="p-4 border-t border-[var(--border)] flex justify-center">
+                        <ThemeToggle />
                     </div>
                 )}
 

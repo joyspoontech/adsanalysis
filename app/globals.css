@@ -1,7 +1,43 @@
 @import "tailwindcss";
 
-:root {
-  /* Clean Light Theme Color Palette */
+/* ============================
+   DARK THEME (Default)
+   ============================ */
+:root,
+[data-theme="dark"] {
+  --background: #0a0a0f;
+  --background-secondary: #111118;
+  --surface: #161620;
+  --surface-light: #1c1c28;
+  --border: #262630;
+  --border-light: #32323e;
+
+  --text-primary: #f4f4f7;
+  --text-secondary: #9898a6;
+  --text-muted: #5c5c6b;
+
+  --primary: #6366f1;
+  --primary-light: #818cf8;
+  --primary-subtle: rgba(99, 102, 241, 0.12);
+
+  --success: #22c55e;
+  --success-subtle: rgba(34, 197, 94, 0.12);
+
+  --warning: #f59e0b;
+  --warning-subtle: rgba(245, 158, 11, 0.12);
+
+  --error: #ef4444;
+  --error-subtle: rgba(239, 68, 68, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* ============================
+   LIGHT THEME
+   ============================ */
+[data-theme="light"] {
   --background: #fafafa;
   --background-secondary: #f4f4f5;
   --surface: #ffffff;
@@ -29,7 +65,12 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
 
+/* ============================
+   SHARED STYLES
+   ============================ */
+:root {
   --radius-sm: 6px;
   --radius: 8px;
   --radius-lg: 12px;
@@ -47,9 +88,10 @@ body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Scrollbar - Minimal */
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -68,12 +110,13 @@ body {
   background: var(--text-muted);
 }
 
-/* Card Styles - Clean with subtle shadow */
+/* Card Styles */
 .glass {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .glass-light {
@@ -82,7 +125,9 @@ body {
   border-radius: var(--radius-lg);
 }
 
-/* Animations */
+/* ============================
+   ANIMATIONS
+   ============================ */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -163,6 +208,16 @@ body {
   }
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
 }
@@ -187,7 +242,11 @@ body {
   animation: pulse 2s ease-in-out infinite;
 }
 
-/* Staggered animations for lists */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Staggered animations */
 .stagger-1 {
   animation-delay: 0.05s;
 }
@@ -208,7 +267,7 @@ body {
   animation-delay: 0.25s;
 }
 
-/* Card hover with animation */
+/* Card hover */
 .card-hover {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -230,7 +289,9 @@ body {
   border-radius: var(--radius);
 }
 
-/* Button Styles - Clean with hover animation */
+/* ============================
+   BUTTONS
+   ============================ */
 .btn-primary {
   background: var(--primary);
   color: white;
@@ -282,7 +343,9 @@ body {
   cursor: not-allowed;
 }
 
-/* Input Styles */
+/* ============================
+   FORM ELEMENTS
+   ============================ */
 .input-field {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -304,7 +367,6 @@ body {
   color: var(--text-muted);
 }
 
-/* Select Styles */
 .select-field {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -323,7 +385,9 @@ body {
   box-shadow: 0 0 0 3px var(--primary-subtle);
 }
 
-/* Table Styles - Clean */
+/* ============================
+   TABLE
+   ============================ */
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -352,10 +416,12 @@ body {
 }
 
 .data-table tr:hover td {
-  background: var(--background-secondary);
+  background: var(--surface-light);
 }
 
-/* Chart Container */
+/* ============================
+   CHART & RECHARTS
+   ============================ */
 .chart-container {
   background: var(--surface);
   border-radius: var(--radius-lg);
@@ -364,7 +430,6 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-/* Recharts Styling */
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line {
   stroke: var(--border);
@@ -375,7 +440,9 @@ body {
   font-size: 11px;
 }
 
-/* Badge - Simple with subtle animation */
+/* ============================
+   BADGES
+   ============================ */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -410,7 +477,9 @@ body {
   color: var(--primary);
 }
 
-/* Sidebar Navigation - Clean with active indicator */
+/* ============================
+   NAVIGATION
+   ============================ */
 .nav-item {
   display: flex;
   align-items: center;
@@ -426,7 +495,7 @@ body {
 }
 
 .nav-item:hover {
-  background: var(--background-secondary);
+  background: var(--surface-light);
   color: var(--text-primary);
 }
 
@@ -448,7 +517,9 @@ body {
   border-radius: 0 2px 2px 0;
 }
 
-/* Dropdown with slide animation */
+/* ============================
+   DROPDOWN & MODAL
+   ============================ */
 .dropdown-menu {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -468,14 +539,13 @@ body {
 }
 
 .dropdown-item:hover {
-  background: var(--background-secondary);
+  background: var(--surface-light);
 }
 
-/* Modal with fade animation */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -497,7 +567,9 @@ body {
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Sync Status with pulse animation */
+/* ============================
+   SYNC STATUS
+   ============================ */
 .sync-indicator {
   display: flex;
   align-items: center;
@@ -516,16 +588,6 @@ body {
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .sync-indicator.success {
   background: var(--success-subtle);
   color: var(--success);
@@ -536,7 +598,9 @@ body {
   color: var(--error);
 }
 
-/* Platform Colors */
+/* ============================
+   PLATFORM COLORS
+   ============================ */
 .platform-swiggy {
   --platform-color: #FC8019;
 }
@@ -553,24 +617,41 @@ body {
   --platform-color: #41B883;
 }
 
-/* Number counter animation */
-.number-animate {
-  transition: all 0.3s ease-out;
+/* ============================
+   THEME TOGGLE BUTTON
+   ============================ */
+.theme-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-/* Page transition */
-.page-enter {
-  opacity: 0;
-  transform: translateY(10px);
+.theme-toggle:hover {
+  background: var(--surface-light);
+  border-color: var(--border-light);
 }
 
-.page-enter-active {
-  opacity: 1;
-  transform: translateY(0);
-  transition: all 0.3s ease-out;
+.theme-toggle svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+  transition: transform 0.3s ease;
 }
 
-/* Responsive */
+.theme-toggle:hover svg {
+  transform: rotate(15deg);
+}
+
+/* ============================
+   RESPONSIVE
+   ============================ */
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
@@ -584,7 +665,9 @@ body {
   }
 }
 
-/* Utility Classes */
+/* ============================
+   UTILITIES
+   ============================ */
 .text-muted {
   color: var(--text-muted);
 }
