@@ -161,28 +161,19 @@ export default function DataSourcesPage() {
                         Manage your Google Sheet connections
                     </p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                     <button
                         onClick={() => syncAllWithQuery()}
                         disabled={isSyncing || sources.length === 0}
                         className="btn-primary flex items-center gap-2"
-                        title="Uses Google Query API - faster and more reliable"
+                        title="Sync using Google Query API"
                     >
                         <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                        ⚡ Sync (Query)
-                    </button>
-                    <button
-                        onClick={() => syncAll()}
-                        disabled={isSyncing || sources.length === 0}
-                        className="btn-secondary flex items-center gap-2"
-                        title="Original CSV-based sync"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                        Sync (CSV)
+                        {isSyncing ? 'Syncing...' : 'Sync All'}
                     </button>
                     <button
                         onClick={() => setShowAddForm(true)}
-                        className="btn-primary flex items-center gap-2"
+                        className="btn-secondary flex items-center gap-2"
                     >
                         <Plus className="w-4 h-4" />
                         Add Source
