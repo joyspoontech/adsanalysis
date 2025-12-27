@@ -38,18 +38,18 @@ export default function Sidebar() {
                 <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
                     {!collapsed && (
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
-                                <BarChart3 className="w-6 h-6 text-white" />
+                            <div className="w-9 h-9 rounded-lg bg-[var(--primary)] flex items-center justify-center">
+                                <BarChart3 className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                                <h1 className="font-bold text-lg">Analytics</h1>
+                                <h1 className="font-semibold text-base">Analytics</h1>
                                 <p className="text-xs text-[var(--text-muted)]">Dashboard 2.0</p>
                             </div>
                         </div>
                     )}
                     {collapsed && (
-                        <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center mx-auto">
-                            <BarChart3 className="w-6 h-6 text-white" />
+                        <div className="w-9 h-9 rounded-lg bg-[var(--primary)] flex items-center justify-center mx-auto">
+                            <BarChart3 className="w-5 h-5 text-white" />
                         </div>
                     )}
                 </div>

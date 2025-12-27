@@ -21,10 +21,10 @@ export default function ChartCard({
     action,
 }: ChartCardProps) {
     return (
-        <div className={`glass rounded-2xl p-6 ${className}`}>
-            <div className="flex items-start justify-between mb-6">
+        <div className={`glass rounded-xl p-5 ${className}`}>
+            <div className="flex items-start justify-between mb-4">
                 <div>
-                    <h3 className="font-semibold text-lg">{title}</h3>
+                    <h3 className="font-medium text-base">{title}</h3>
                     {subtitle && (
                         <p className="text-sm text-[var(--text-muted)] mt-1">{subtitle}</p>
                     )}

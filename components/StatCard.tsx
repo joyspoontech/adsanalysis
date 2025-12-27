@@ -86,48 +86,41 @@ export default function StatCard({
     const change = getChange();
 
     const colorClasses = {
-        primary: 'from-[var(--primary)] to-[var(--accent-pink)]',
-        secondary: 'from-[var(--secondary)] to-[var(--primary)]',
-        success: 'from-[var(--success)] to-emerald-400',
-        warning: 'from-[var(--warning)] to-orange-400',
-    };
-
-    const glowClasses = {
-        primary: 'glow-primary',
-        secondary: 'shadow-[0_0_20px_rgba(6,182,212,0.3)]',
-        success: 'glow-success',
-        warning: 'glow-warning',
+        primary: 'bg-[var(--primary)]',
+        secondary: 'bg-cyan-500',
+        success: 'bg-[var(--success)]',
+        warning: 'bg-[var(--warning)]',
     };
 
     return (
-        <div className="glass rounded-2xl p-6 card-hover">
-            <div className="flex items-start justify-between mb-4">
+        <div className="glass rounded-xl p-5 card-hover">
+            <div className="flex items-start justify-between mb-3">
                 <div
-                    className={`w-12 h-12 rounded-xl bg-gradient-to-br ${colorClasses[color]} flex items-center justify-center ${glowClasses[color]}`}
+                    className={`w-10 h-10 rounded-lg ${colorClasses[color]} flex items-center justify-center`}
                 >
-                    <Icon className="w-6 h-6 text-white" />
+                    <Icon className="w-5 h-5 text-white" />
                 </div>
                 {change && (
                     <div
-                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-sm ${change.positive
-                                ? 'bg-[var(--success)]/20 text-[var(--success)]'
-                                : 'bg-[var(--error)]/20 text-[var(--error)]'
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${change.positive
+                            ? 'bg-[var(--success-subtle)] text-[var(--success)]'
+                            : 'bg-[var(--error-subtle)] text-[var(--error)]'
                             }`}
                     >
                         {change.positive ? (
-                            <TrendingUp className="w-4 h-4" />
+                            <TrendingUp className="w-3 h-3" />
                         ) : (
-                            <TrendingDown className="w-4 h-4" />
+                            <TrendingDown className="w-3 h-3" />
                         )}
                         <span>{change.value}%</span>
                     </div>
                 )}
             </div>
 
-            <h3 className="text-[var(--text-secondary)] text-sm font-medium mb-2">{title}</h3>
+            <h3 className="text-[var(--text-muted)] text-xs font-medium uppercase tracking-wide mb-1">{title}</h3>
 
             <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-bold text-glow">
+                <span className="text-2xl font-semibold">
                     {prefix}
                     {formatValue(displayValue)}
                     {suffix}
@@ -135,7 +128,7 @@ export default function StatCard({
             </div>
 
             {previousValue && (
-                <p className="text-xs text-[var(--text-muted)] mt-2">
+                <p className="text-xs text-[var(--text-muted)] mt-1.5">
                     vs {formatValue(previousValue)} last period
                 </p>
             )}
