@@ -9,12 +9,63 @@ interface DateRangePickerProps {
 }
 
 const presets = [
-    { label: 'Today', getValue: () => ({ start: new Date(), end: new Date() }) },
-    { label: 'Last 7 Days', getValue: () => ({ start: subDays(new Date(), 7), end: new Date() }) },
-    { label: 'Last 30 Days', getValue: () => ({ start: subDays(new Date(), 30), end: new Date() }) },
-    { label: 'This Month', getValue: () => ({ start: startOfMonth(new Date()), end: new Date() }) },
-    { label: 'Last Month', getValue: () => ({ start: startOfMonth(subMonths(new Date(), 1)), end: endOfMonth(subMonths(new Date(), 1)) }) },
-    { label: 'This Year', getValue: () => ({ start: startOfYear(new Date()), end: new Date() }) },
+    {
+        label: 'Today',
+        getValue: () => {
+            const today = new Date();
+            today.setHours(12, 0, 0, 0);
+            return { start: today, end: today };
+        }
+    },
+    {
+        label: 'Last 7 Days',
+        getValue: () => {
+            const end = new Date();
+            end.setHours(12, 0, 0, 0);
+            const start = new Date(end);
+            start.setDate(start.getDate() - 6); // 7 days including today
+            return { start, end };
+        }
+    },
+    {
+        label: 'Last 30 Days',
+        getValue: () => {
+            const end = new Date();
+            end.setHours(12, 0, 0, 0);
+            const start = new Date(end);
+            start.setDate(start.getDate() - 29); // 30 days including today
+            return { start, end };
+        }
+    },
+    {
+        label: 'This Month',
+        getValue: () => {
+            const now = new Date();
+            const start = new Date(now.getFullYear(), now.getMonth(), 1, 12, 0, 0, 0);
+            const end = new Date();
+            end.setHours(12, 0, 0, 0);
+            return { start, end };
+        }
+    },
+    {
+        label: 'Last Month',
+        getValue: () => {
+            const now = new Date();
+            const start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 12, 0, 0, 0);
+            const end = new Date(now.getFullYear(), now.getMonth(), 0, 12, 0, 0, 0); // Day 0 = last day of previous month
+            return { start, end };
+        }
+    },
+    {
+        label: 'This Year',
+        getValue: () => {
+            const now = new Date();
+            const start = new Date(now.getFullYear(), 0, 1, 12, 0, 0, 0);
+            const end = new Date();
+            end.setHours(12, 0, 0, 0);
+            return { start, end };
+        }
+    },
 ];
 
 export default function DateRangePicker({ onRangeChange }: DateRangePickerProps) {

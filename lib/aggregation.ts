@@ -218,7 +218,8 @@ export function getDateRange(period: 'today' | 'yesterday' | 'last7' | 'last30' 
     end: Date;
 } {
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // Set to noon to avoid timezone issues when converting to ISO date
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
 
     switch (period) {
         case 'today':
@@ -236,11 +237,11 @@ export function getDateRange(period: 'today' | 'yesterday' | 'last7' | 'last30' 
             last30Start.setDate(today.getDate() - 29);
             return { start: last30Start, end: today };
         case 'thisMonth':
-            const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1, 12, 0, 0, 0);
             return { start: thisMonthStart, end: today };
         case 'lastMonth':
-            const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+            const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 12, 0, 0, 0);
+            const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 12, 0, 0, 0);
             return { start: lastMonthStart, end: lastMonthEnd };
         default:
             return { start: today, end: today };
