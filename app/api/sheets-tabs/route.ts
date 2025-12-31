@@ -23,52 +23,54 @@ export async function GET(request: NextRequest) {
     const tabs: TabInfo[] = [];
     const foundGids = new Set<string>();
 
-    // Method 1: Try the Google Feeds API (works for published sheets)
+    // Method 1: Use the htmlembed endpoint (BEST - works for "anyone with link" sheets!)
+    // This endpoint returns JavaScript with items.push({name: "SheetName", ... gid=123})
     try {
-        const feedUrl = `https://spreadsheets.google.com/feeds/worksheets/${sheetId}/public/basic?alt=json`;
-        console.log(`[API /sheets-tabs] Trying feeds API: ${feedUrl}`);
+        const htmlEmbedUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/htmlembed`;
+        console.log(`[API /sheets-tabs] Trying htmlembed: ${htmlEmbedUrl}`);
 
-        const feedResponse = await fetch(feedUrl, {
+        const embedResponse = await fetch(htmlEmbedUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             },
         });
 
-        if (feedResponse.ok) {
-            const feedData = await feedResponse.json();
-            console.log(`[API /sheets-tabs] Feeds API returned data`);
+        if (embedResponse.ok) {
+            const html = await embedResponse.text();
+            console.log(`[API /sheets-tabs] Got htmlembed: ${html.length} chars`);
 
-            if (feedData.feed && feedData.feed.entry) {
-                for (const entry of feedData.feed.entry) {
-                    const name = entry.title?.$t || entry.title || 'Unnamed';
+            // Pattern: items.push({name: "SheetName", pageUrl: "...gid=123...
+            // This regex captures the sheet name and gid from the JavaScript in htmlembed
+            const pattern = /items\.push\(\{name:\s*"([^"]+)"[^}]*gid=(\d+)/g;
+            let match;
+            while ((match = pattern.exec(html)) !== null) {
+                const name = match[1].replace(/\\\//g, '/'); // Unescape forward slashes
+                const gid = match[2];
+                if (name && !foundGids.has(gid)) {
+                    foundGids.add(gid);
+                    tabs.push({ name, gid });
+                    console.log(`[API /sheets-tabs] Htmlembed found: ${name} (gid: ${gid})`);
+                }
+            }
 
-                    // Extract gid from the link or id
-                    let gid = '0';
-                    const link = entry.link?.find((l: any) =>
-                        l.rel === 'http://schemas.google.com/spreadsheets/2006#listfeed'
-                    );
-                    if (link?.href) {
-                        const gidMatch = link.href.match(/\/([a-z0-9]+)\/public/);
-                        if (gidMatch) gid = gidMatch[1];
-                    }
-
-                    if (gid === '0' && entry.id?.$t) {
-                        const idMatch = entry.id.$t.match(/\/([^\/]+)$/);
-                        if (idMatch) gid = idMatch[1];
-                    }
-
-                    if (!foundGids.has(gid)) {
+            // Also try alternative pattern: gid: "123" right after name
+            if (tabs.length === 0) {
+                const pattern2 = /name:\s*"([^"]+)"[^}]*gid:\s*"(\d+)"/g;
+                while ((match = pattern2.exec(html)) !== null) {
+                    const name = match[1].replace(/\\\//g, '/');
+                    const gid = match[2];
+                    if (name && !foundGids.has(gid)) {
                         foundGids.add(gid);
                         tabs.push({ name, gid });
-                        console.log(`[API /sheets-tabs] Feed found: ${name} (gid: ${gid})`);
+                        console.log(`[API /sheets-tabs] Pattern2 found: ${name} (gid: ${gid})`);
                     }
                 }
             }
         } else {
-            console.log(`[API /sheets-tabs] Feeds API failed: ${feedResponse.status}`);
+            console.log(`[API /sheets-tabs] Htmlembed failed: ${embedResponse.status}`);
         }
     } catch (error) {
-        console.error('[API /sheets-tabs] Feeds API error:', error);
+        console.error('[API /sheets-tabs] Htmlembed error:', error);
     }
 
     // Method 2: Parse the pubhtml page for tab information
