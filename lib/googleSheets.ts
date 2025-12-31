@@ -57,8 +57,9 @@ export function buildCsvExportUrl(sheetId: string, tabName?: string, gid?: strin
 }
 
 /**
+ * Google Sheets Integration Utilities/**
  * Fetch sheet metadata to get all tab names
- * Uses multiple methods to try to detect tabs
+ * Uses the Google Sheets feeds endpoint which returns sheet metadata as JSON
  */
 export async function fetchSheetTabs(sheetId: string): Promise<SheetTabInfo[]> {
   const tabs: SheetTabInfo[] = [];
@@ -67,158 +68,136 @@ export async function fetchSheetTabs(sheetId: string): Promise<SheetTabInfo[]> {
   console.log(`[fetchSheetTabs] Starting tab detection for sheet: ${sheetId}`);
 
   try {
-    // Method 1: Use the pubhtml page which lists all sheets
-    const pubHtmlUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/pubhtml`;
-    console.log(`[fetchSheetTabs] Trying pubhtml: ${pubHtmlUrl}`);
+    // Method 1: Try the worksheets feed which lists all sheets with their names and gids
+    // This is the most reliable method for getting actual tab names
+    const feedUrl = `https://spreadsheets.google.com/feeds/worksheets/${sheetId}/public/basic?alt=json`;
+    console.log(`[fetchSheetTabs] Trying worksheets feed: ${feedUrl}`);
 
-    const pubResponse = await fetch(pubHtmlUrl);
-    if (pubResponse.ok) {
-      const pubHtml = await pubResponse.text();
-      console.log(`[fetchSheetTabs] Got pubhtml response: ${pubHtml.length} chars`);
+    const feedResponse = await fetch(feedUrl);
+    if (feedResponse.ok) {
+      const feedData = await feedResponse.json();
+      console.log(`[fetchSheetTabs] Got feed response`);
 
-      // Pattern 1: <li id="sheet-button-123"><a>Sheet Name</a></li>
-      const pattern1 = /id="sheet-button-(\d+)"[^>]*>.*?<a[^>]*>([^<]+)<\/a>/gi;
-      let match;
-      while ((match = pattern1.exec(pubHtml)) !== null) {
-        const gid = match[1];
-        const name = match[2].trim();
-        if (name && !foundGids.has(gid)) {
-          foundGids.add(gid);
-          tabs.push({ name, gid, rowCount: 0, headers: [] });
-          console.log(`[fetchSheetTabs] Pattern1 found: ${name} (gid: ${gid})`);
+      if (feedData.feed && feedData.feed.entry) {
+        for (const entry of feedData.feed.entry) {
+          // Extract sheet name from title
+          const name = entry.title?.$t || entry.title || 'Unnamed';
+
+          // Extract gid from the link
+          // Link format: https://spreadsheets.google.com/feeds/list/{sheetId}/{gid}/public/basic
+          const link = entry.link?.find((l: any) => l.rel === 'http://schemas.google.com/spreadsheets/2006#listfeed');
+          let gid = '0';
+          if (link?.href) {
+            const gidMatch = link.href.match(/\/([a-z0-9]+)\/public/);
+            if (gidMatch) {
+              gid = gidMatch[1];
+            }
+          }
+
+          // Also try the id field
+          if (gid === '0' && entry.id?.$t) {
+            const idMatch = entry.id.$t.match(/\/([^\/]+)$/);
+            if (idMatch) {
+              gid = idMatch[1];
+            }
+          }
+
+          if (!foundGids.has(gid)) {
+            foundGids.add(gid);
+            tabs.push({ name, gid, rowCount: 0, headers: [] });
+            console.log(`[fetchSheetTabs] Feed found: ${name} (gid: ${gid})`);
+          }
         }
       }
+    } else {
+      console.log(`[fetchSheetTabs] Feed request failed: ${feedResponse.status}`);
+    }
+  } catch (error) {
+    console.error('[fetchSheetTabs] Error fetching feeds:', error);
+  }
 
-      // Pattern 2: data-id="123"...>Sheet Name</a>
-      if (tabs.length === 0) {
-        const pattern2 = /data-id="(\d+)"[^>]*>[^<]*<a[^>]*>([^<]+)<\/a>/gi;
-        while ((match = pattern2.exec(pubHtml)) !== null) {
+  // Method 2: If feeds didn't work, try pubhtml parsing
+  if (tabs.length === 0) {
+    try {
+      const pubHtmlUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/pubhtml`;
+      console.log(`[fetchSheetTabs] Trying pubhtml: ${pubHtmlUrl}`);
+
+      const pubResponse = await fetch(pubHtmlUrl);
+      if (pubResponse.ok) {
+        const pubHtml = await pubResponse.text();
+        console.log(`[fetchSheetTabs] Got pubhtml response: ${pubHtml.length} chars`);
+
+        // Pattern: Look for sheet tab buttons with gid and name
+        // In pubhtml, tabs are in format: <li id="sheet-button-123"><a...>Name</a></li>
+        const pattern1 = /id="sheet-button-(\d+)"[^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/gi;
+        let match;
+        while ((match = pattern1.exec(pubHtml)) !== null) {
           const gid = match[1];
           const name = match[2].trim();
           if (name && !foundGids.has(gid)) {
             foundGids.add(gid);
             tabs.push({ name, gid, rowCount: 0, headers: [] });
-            console.log(`[fetchSheetTabs] Pattern2 found: ${name} (gid: ${gid})`);
+            console.log(`[fetchSheetTabs] Pubhtml found: ${name} (gid: ${gid})`);
           }
         }
-      }
 
-      // Pattern 3: Look for gid= in any href and nearby text  
-      if (tabs.length === 0) {
-        const pattern3 = /gid=(\d+)[^>]*>([^<]+)</gi;
-        while ((match = pattern3.exec(pubHtml)) !== null) {
-          const gid = match[1];
-          const name = match[2].trim();
-          if (name && name.length < 100 && !foundGids.has(gid)) {
-            foundGids.add(gid);
-            tabs.push({ name, gid, rowCount: 0, headers: [] });
-            console.log(`[fetchSheetTabs] Pattern3 found: ${name} (gid: ${gid})`);
-          }
-        }
-      }
-
-      // Pattern 4: Look for sheet tabs in JSON data embedded in HTML
-      const jsonPattern = /"sheets":\s*\[([^[\]]*)\]/;
-      const jsonMatch = pubHtml.match(jsonPattern);
-      if (jsonMatch && tabs.length === 0) {
-        try {
-          // Try to extract sheet info from embedded JSON
-          const sheetListPattern = /"name":\s*"([^"]+)"[^}]*"sheetId":\s*(\d+)/g;
-          while ((match = sheetListPattern.exec(pubHtml)) !== null) {
-            const name = match[1];
-            const gid = match[2];
+        // Alternative: Look for switchToSheet function calls
+        // switchToSheet('123')...>Name</a>
+        if (tabs.length === 0) {
+          const pattern2 = /switchToSheet\('(\d+)'\)[^>]*>([^<]+)</gi;
+          while ((match = pattern2.exec(pubHtml)) !== null) {
+            const gid = match[1];
+            const name = match[2].trim();
             if (name && !foundGids.has(gid)) {
               foundGids.add(gid);
               tabs.push({ name, gid, rowCount: 0, headers: [] });
-              console.log(`[fetchSheetTabs] JSON pattern found: ${name} (gid: ${gid})`);
+              console.log(`[fetchSheetTabs] Pattern2 found: ${name} (gid: ${gid})`);
             }
           }
-        } catch (e) {
-          console.log('[fetchSheetTabs] JSON extraction failed');
         }
-      }
 
-      // Pattern 5: Look for sheet-menu items
-      const pattern5 = /class="[^"]*sheet-menu-button[^"]*"[^>]*data-sheetid="(\d+)"[^>]*>([^<]*)</gi;
-      while ((match = pattern5.exec(pubHtml)) !== null) {
-        const gid = match[1];
-        const name = match[2].trim();
-        if (name && !foundGids.has(gid)) {
-          foundGids.add(gid);
-          tabs.push({ name, gid, rowCount: 0, headers: [] });
-          console.log(`[fetchSheetTabs] Pattern5 found: ${name} (gid: ${gid})`);
-        }
-      }
-
-      // Pattern 6: Look in script tags for sheet info
-      const scriptPattern = /\["([^"]{1,50})",\s*(\d+),\s*\d+,\s*\d+,\s*\d+,\s*\d+,\s*\d+\]/g;
-      while ((match = scriptPattern.exec(pubHtml)) !== null) {
-        const name = match[1];
-        const gid = match[2];
-        if (name && !name.includes('\\') && !foundGids.has(gid)) {
-          foundGids.add(gid);
-          tabs.push({ name, gid, rowCount: 0, headers: [] });
-          console.log(`[fetchSheetTabs] Script pattern found: ${name} (gid: ${gid})`);
-        }
-      }
-    }
-  } catch (error) {
-    console.error('[fetchSheetTabs] Error fetching pubhtml:', error);
-  }
-
-  // Method 2: Try the edit page HTML which might have sheet tabs  
-  if (tabs.length <= 1) {
-    try {
-      // Try fetching with a different approach - the HTML embed
-      const htmlEmbedUrl = `https://docs.google.com/spreadsheets/d/e/${sheetId}/pubhtml`;
-      const embedResponse = await fetch(htmlEmbedUrl);
-      if (embedResponse.ok) {
-        const embedHtml = await embedResponse.text();
-        // Look for sheet navigation
-        const embedPattern = /#gid=(\d+)[^>]*>([^<]+)</gi;
-        let match;
-        while ((match = embedPattern.exec(embedHtml)) !== null) {
-          const gid = match[1];
-          const name = match[2].trim();
-          if (name && !foundGids.has(gid)) {
-            foundGids.add(gid);
-            tabs.push({ name, gid, rowCount: 0, headers: [] });
-            console.log(`[fetchSheetTabs] Embed pattern found: ${name} (gid: ${gid})`);
+        // Look for #gid=xxx links with names
+        if (tabs.length === 0) {
+          const pattern3 = /#gid=(\d+)[^>]*>([^<]{1,100})</gi;
+          while ((match = pattern3.exec(pubHtml)) !== null) {
+            const gid = match[1];
+            const name = match[2].trim();
+            if (name && name.length < 100 && !foundGids.has(gid)) {
+              foundGids.add(gid);
+              tabs.push({ name, gid, rowCount: 0, headers: [] });
+              console.log(`[fetchSheetTabs] Pattern3 found: ${name} (gid: ${gid})`);
+            }
           }
         }
       }
-    } catch (e) {
-      console.log('[fetchSheetTabs] Embed URL method failed');
+    } catch (error) {
+      console.error('[fetchSheetTabs] Error fetching pubhtml:', error);
     }
   }
 
-  // Method 3: Probe for tabs by trying gids 0-20
-  if (tabs.length <= 1) {
-    console.log('[fetchSheetTabs] Probing for tabs by gid...');
-    for (let gid = 0; gid <= 20; gid++) {
-      if (foundGids.has(String(gid))) continue;
-
-      try {
-        const csvData = await fetchSheetAsCsv(sheetId, undefined, String(gid));
-        if (csvData.length > 0) {
-          const headers = Object.keys(csvData[0]);
-          foundGids.add(String(gid));
-          tabs.push({
-            name: `Sheet ${tabs.length + 1}`,
-            gid: String(gid),
-            rowCount: csvData.length,
-            headers
-          });
-          console.log(`[fetchSheetTabs] Found tab via probe: gid=${gid}, ${csvData.length} rows`);
-        }
-      } catch (e) {
-        // This gid doesn't exist or isn't accessible, continue
+  // Method 3: If still no tabs or only one, fallback to probing 
+  // BUT only probe if we truly found nothing - don't duplicate
+  if (tabs.length === 0) {
+    console.log('[fetchSheetTabs] No tabs found via metadata, probing gid=0 as default');
+    try {
+      const csvData = await fetchSheetAsCsv(sheetId, undefined, '0');
+      if (csvData.length > 0) {
+        const headers = Object.keys(csvData[0]);
+        tabs.push({
+          name: 'Sheet1',
+          gid: '0',
+          rowCount: csvData.length,
+          headers
+        });
+        console.log(`[fetchSheetTabs] Default tab: ${csvData.length} rows`);
       }
+    } catch (e) {
+      console.error('[fetchSheetTabs] Default probe failed:', e);
     }
   }
 
   // Fetch row count and headers for tabs that don't have them
-  console.log(`[fetchSheetTabs] Fetching metadata for ${tabs.length} tabs...`);
+  console.log(`[fetchSheetTabs] Fetching data for ${tabs.length} tabs...`);
   for (const tab of tabs) {
     if (tab.rowCount === 0 || tab.headers.length === 0) {
       try {
@@ -234,25 +213,7 @@ export async function fetchSheetTabs(sheetId: string): Promise<SheetTabInfo[]> {
     }
   }
 
-  // If still no tabs, create a default one
-  if (tabs.length === 0) {
-    console.log('[fetchSheetTabs] No tabs found, trying default...');
-    try {
-      const csvData = await fetchSheetAsCsv(sheetId);
-      if (csvData.length > 0) {
-        tabs.push({
-          name: 'Sheet1',
-          gid: '0',
-          rowCount: csvData.length,
-          headers: Object.keys(csvData[0] || {})
-        });
-      }
-    } catch (e) {
-      console.error('[fetchSheetTabs] Failed to fetch default tab:', e);
-    }
-  }
-
-  console.log(`[fetchSheetTabs] Final result: ${tabs.length} tabs found:`, tabs.map(t => `${t.name} (gid:${t.gid})`));
+  console.log(`[fetchSheetTabs] Final result: ${tabs.length} tabs:`, tabs.map(t => `${t.name} (gid:${t.gid})`));
   return tabs;
 }
 
