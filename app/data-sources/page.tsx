@@ -14,6 +14,9 @@ import {
     FileSpreadsheet,
     Eye,
     EyeOff,
+    ChevronDown,
+    ChevronRight,
+    Layers,
 } from 'lucide-react';
 import { useDataSources } from '@/hooks/useDataSources';
 import { useSync } from '@/hooks/useSync';
@@ -34,6 +37,13 @@ interface PreviewData {
     rows: (string | number)[][];
 }
 
+interface SelectedTabConfig {
+    tab: SheetTabInfo;
+    platform: string;
+    dataType: 'ads' | 'sales';
+    name: string;
+}
+
 export default function DataSourcesPage() {
     const { sources, isLoading, add, remove, toggleActive, refresh } = useDataSources();
     const { isSyncing, syncOne, syncAll, syncAllWithQuery } = useSync();
@@ -41,16 +51,17 @@ export default function DataSourcesPage() {
     // Add new source state
     const [showAddForm, setShowAddForm] = useState(false);
     const [newUrl, setNewUrl] = useState('');
-    const [newName, setNewName] = useState('');
     const [validating, setValidating] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
     const [detectedTabs, setDetectedTabs] = useState<SheetTabInfo[]>([]);
-    const [selectedTab, setSelectedTab] = useState<SheetTabInfo | null>(null);
-    const [selectedPlatform, setSelectedPlatform] = useState('swiggy');
-    const [selectedDataType, setSelectedDataType] = useState<'ads' | 'sales'>('ads');
+    const [selectedTabs, setSelectedTabs] = useState<SelectedTabConfig[]>([]);
     const [preview, setPreview] = useState<PreviewData | null>(null);
+    const [previewTab, setPreviewTab] = useState<SheetTabInfo | null>(null);
     const [adding, setAdding] = useState(false);
     const [sheetId, setSheetId] = useState<string | null>(null);
+
+    // Collapsed groups state for display
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
     // Validate URL and detect tabs
     const handleValidateUrl = async () => {
@@ -59,8 +70,9 @@ export default function DataSourcesPage() {
         setValidating(true);
         setValidationError(null);
         setDetectedTabs([]);
-        setSelectedTab(null);
+        setSelectedTabs([]);
         setPreview(null);
+        setPreviewTab(null);
 
         try {
             const result = await validateSheetUrl(newUrl);
@@ -72,13 +84,6 @@ export default function DataSourcesPage() {
 
             setSheetId(result.sheetId);
             setDetectedTabs(result.tabs);
-
-            if (result.tabs.length > 0) {
-                setSelectedTab(result.tabs[0]);
-                // Auto-detect data type
-                const dataType = detectDataType(result.tabs[0].headers);
-                setSelectedDataType(dataType);
-            }
         } catch (error) {
             setValidationError('Failed to validate sheet URL');
         } finally {
@@ -86,15 +91,70 @@ export default function DataSourcesPage() {
         }
     };
 
-    // Load preview for selected tab
-    const handleTabSelect = async (tab: SheetTabInfo) => {
-        setSelectedTab(tab);
+    // Toggle tab selection
+    const handleToggleTab = (tab: SheetTabInfo) => {
+        const existing = selectedTabs.find(t => t.tab.gid === tab.gid);
+        if (existing) {
+            setSelectedTabs(selectedTabs.filter(t => t.tab.gid !== tab.gid));
+        } else {
+            // Auto-detect data type based on headers
+            const dataType = detectDataType(tab.headers);
+            // Auto-detect platform from tab name
+            let platform = 'swiggy';
+            const tabNameLower = tab.name.toLowerCase();
+            if (tabNameLower.includes('zepto')) platform = 'zepto';
+            else if (tabNameLower.includes('blinkit')) platform = 'blinkit';
+            else if (tabNameLower.includes('instamart')) platform = 'instamart';
+            else if (tabNameLower.includes('amazon')) platform = 'amazon';
+            else if (tabNameLower.includes('flipkart')) platform = 'flipkart';
 
-        // Auto-detect data type
-        const dataType = detectDataType(tab.headers);
-        setSelectedDataType(dataType);
+            setSelectedTabs([...selectedTabs, {
+                tab,
+                platform,
+                dataType,
+                name: `${platform}-${tab.name}`
+            }]);
+        }
+    };
 
-        // Load preview
+    // Select all tabs
+    const handleSelectAll = () => {
+        if (selectedTabs.length === detectedTabs.length) {
+            setSelectedTabs([]);
+        } else {
+            const newSelected: SelectedTabConfig[] = detectedTabs.map(tab => {
+                const dataType = detectDataType(tab.headers);
+                let platform = 'swiggy';
+                const tabNameLower = tab.name.toLowerCase();
+                if (tabNameLower.includes('zepto')) platform = 'zepto';
+                else if (tabNameLower.includes('blinkit')) platform = 'blinkit';
+                else if (tabNameLower.includes('instamart')) platform = 'instamart';
+                else if (tabNameLower.includes('amazon')) platform = 'amazon';
+                else if (tabNameLower.includes('flipkart')) platform = 'flipkart';
+
+                return {
+                    tab,
+                    platform,
+                    dataType,
+                    name: `${platform}-${tab.name}`
+                };
+            });
+            setSelectedTabs(newSelected);
+        }
+    };
+
+    // Update config for a selected tab
+    const updateTabConfig = (gid: string, field: 'platform' | 'dataType' | 'name', value: string) => {
+        setSelectedTabs(selectedTabs.map(t =>
+            t.tab.gid === gid
+                ? { ...t, [field]: value }
+                : t
+        ));
+    };
+
+    // Load preview for a tab
+    const handlePreviewTab = async (tab: SheetTabInfo) => {
+        setPreviewTab(tab);
         if (sheetId) {
             try {
                 const previewData = await fetchSheetPreview(sheetId, tab.name, tab.gid);
@@ -105,34 +165,36 @@ export default function DataSourcesPage() {
         }
     };
 
-    // Add new data source
-    const handleAdd = async () => {
-        if (!selectedTab || !sheetId) return;
+    // Add all selected tabs
+    const handleAddAll = async () => {
+        if (selectedTabs.length === 0 || !sheetId) return;
 
         setAdding(true);
         try {
-            await add({
-                name: newName || `${selectedPlatform}-${selectedDataType}`,
-                sheet_id: sheetId,
-                sheet_url: newUrl,
-                platform: selectedPlatform,
-                data_type: selectedDataType,
-                tab_name: selectedTab.name,
-                tab_gid: selectedTab.gid,
-                is_active: true,
-                last_synced_at: null,
-            });
+            for (const config of selectedTabs) {
+                await add({
+                    name: config.name,
+                    sheet_id: sheetId,
+                    sheet_url: newUrl,
+                    platform: config.platform,
+                    data_type: config.dataType,
+                    tab_name: config.tab.name,
+                    tab_gid: config.tab.gid,
+                    is_active: true,
+                    last_synced_at: null,
+                });
+            }
 
             // Reset form
             setShowAddForm(false);
             setNewUrl('');
-            setNewName('');
             setDetectedTabs([]);
-            setSelectedTab(null);
+            setSelectedTabs([]);
             setPreview(null);
+            setPreviewTab(null);
             setSheetId(null);
         } catch (error) {
-            console.error('Failed to add data source:', error);
+            console.error('Failed to add data sources:', error);
         } finally {
             setAdding(false);
         }
@@ -150,6 +212,29 @@ export default function DataSourcesPage() {
         await syncOne(id);
         await refresh();
     };
+
+    // Toggle group collapse
+    const toggleGroupCollapse = (sheetId: string) => {
+        const newCollapsed = new Set(collapsedGroups);
+        if (newCollapsed.has(sheetId)) {
+            newCollapsed.delete(sheetId);
+        } else {
+            newCollapsed.add(sheetId);
+        }
+        setCollapsedGroups(newCollapsed);
+    };
+
+    // Group sources by sheet_id
+    const groupedSources = sources.reduce((acc, source) => {
+        const key = source.sheet_id;
+        if (!acc[key]) {
+            acc[key] = [];
+        }
+        acc[key].push(source);
+        return acc;
+    }, {} as Record<string, typeof sources>);
+
+    const isTabSelected = (gid: string) => selectedTabs.some(t => t.tab.gid === gid);
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -184,8 +269,8 @@ export default function DataSourcesPage() {
             {/* Add Form Modal */}
             {showAddForm && (
                 <div className="modal-overlay" onClick={() => setShowAddForm(false)}>
-                    <div className="modal-content max-w-2xl" onClick={e => e.stopPropagation()}>
-                        <h2 className="text-xl font-bold mb-6">Add Data Source</h2>
+                    <div className="modal-content max-w-4xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <h2 className="text-xl font-bold mb-6">Add Data Sources</h2>
 
                         {/* Step 1: Enter URL */}
                         <div className="space-y-4">
@@ -215,122 +300,137 @@ export default function DataSourcesPage() {
                                 )}
                             </div>
 
-                            {/* Step 2: Select Tab */}
+                            {/* Step 2: Select Tabs (Multi-select) */}
                             {detectedTabs.length > 0 && (
                                 <div>
-                                    <label className="block text-sm font-medium mb-2">
-                                        Select Tab ({detectedTabs.length} found)
-                                    </label>
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-sm font-medium">
+                                            Select Tabs ({selectedTabs.length} of {detectedTabs.length} selected)
+                                        </label>
+                                        <button
+                                            onClick={handleSelectAll}
+                                            className="text-sm text-[var(--primary)] hover:underline"
+                                        >
+                                            {selectedTabs.length === detectedTabs.length ? 'Deselect All' : 'Select All'}
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-1">
                                         {detectedTabs.map((tab) => (
-                                            <button
+                                            <div
                                                 key={tab.gid}
-                                                onClick={() => handleTabSelect(tab)}
-                                                className={`p-3 rounded-lg border text-left transition-all ${selectedTab?.gid === tab.gid
-                                                    ? 'border-[var(--primary)] bg-[var(--primary)]/10'
-                                                    : 'border-[var(--border)] hover:border-[var(--primary)]/50'
+                                                className={`p-3 rounded-lg border text-left transition-all cursor-pointer relative ${isTabSelected(tab.gid)
+                                                        ? 'border-[var(--primary)] bg-[var(--primary)]/10'
+                                                        : 'border-[var(--border)] hover:border-[var(--primary)]/50'
                                                     }`}
+                                                onClick={() => handleToggleTab(tab)}
                                             >
-                                                <p className="font-medium">{tab.name}</p>
-                                                <p className="text-xs text-[var(--text-muted)]">
-                                                    {tab.rowCount} rows • {tab.headers.length} columns
-                                                </p>
-                                            </button>
+                                                <div className="flex items-start gap-2">
+                                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${isTabSelected(tab.gid)
+                                                            ? 'border-[var(--primary)] bg-[var(--primary)]'
+                                                            : 'border-[var(--border)]'
+                                                        }`}>
+                                                        {isTabSelected(tab.gid) && <Check className="w-3 h-3 text-white" />}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-medium truncate">{tab.name}</p>
+                                                        <p className="text-xs text-[var(--text-muted)]">
+                                                            {tab.rowCount} rows • {tab.headers.length} cols
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handlePreviewTab(tab);
+                                                    }}
+                                                    className="absolute top-2 right-2 p-1 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-muted)]"
+                                                    title="Preview"
+                                                >
+                                                    <Eye className="w-3 h-3" />
+                                                </button>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
                             )}
 
-                            {/* Step 3: Configure */}
-                            {selectedTab && (
-                                <>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2">Platform</label>
-                                            <select
-                                                value={selectedPlatform}
-                                                onChange={(e) => setSelectedPlatform(e.target.value)}
-                                                className="select-field"
+                            {/* Step 3: Configure Selected Tabs */}
+                            {selectedTabs.length > 0 && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">
+                                        Configure Selected Tabs
+                                    </label>
+                                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                                        {selectedTabs.map((config) => (
+                                            <div
+                                                key={config.tab.gid}
+                                                className="flex items-center gap-2 p-2 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]"
                                             >
-                                                {PLATFORMS.map((p) => (
-                                                    <option key={p.value} value={p.value}>
-                                                        {p.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2">Data Type</label>
-                                            <select
-                                                value={selectedDataType}
-                                                onChange={(e) => setSelectedDataType(e.target.value as 'ads' | 'sales')}
-                                                className="select-field"
-                                            >
-                                                <option value="ads">Ads Data</option>
-                                                <option value="sales">Sales Data</option>
-                                            </select>
-                                        </div>
+                                                <FileSpreadsheet className="w-4 h-4 text-[var(--primary)] flex-shrink-0" />
+                                                <span className="font-medium text-sm truncate w-32" title={config.tab.name}>
+                                                    {config.tab.name}
+                                                </span>
+                                                <select
+                                                    value={config.platform}
+                                                    onChange={(e) => updateTabConfig(config.tab.gid, 'platform', e.target.value)}
+                                                    className="select-field text-xs py-1 flex-shrink-0"
+                                                    onClick={e => e.stopPropagation()}
+                                                >
+                                                    {PLATFORMS.map((p) => (
+                                                        <option key={p.value} value={p.value}>
+                                                            {p.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <select
+                                                    value={config.dataType}
+                                                    onChange={(e) => updateTabConfig(config.tab.gid, 'dataType', e.target.value)}
+                                                    className="select-field text-xs py-1 flex-shrink-0"
+                                                    onClick={e => e.stopPropagation()}
+                                                >
+                                                    <option value="ads">Ads</option>
+                                                    <option value="sales">Sales</option>
+                                                </select>
+                                                <button
+                                                    onClick={() => handleToggleTab(config.tab)}
+                                                    className="p-1 rounded hover:bg-red-500/10 text-red-500"
+                                                    title="Remove"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
+                                </div>
+                            )}
 
-                                    <div>
-                                        <label className="block text-sm font-medium mb-2">Source Name (optional)</label>
-                                        <input
-                                            type="text"
-                                            value={newName}
-                                            onChange={(e) => setNewName(e.target.value)}
-                                            placeholder={`${selectedPlatform}-${selectedDataType}`}
-                                            className="input-field"
-                                        />
-                                    </div>
-
-                                    {/* Preview */}
-                                    {preview && preview.headers.length > 0 && (
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2">
-                                                Preview (first {preview.rows.length} rows)
-                                            </label>
-                                            <div className="overflow-x-auto max-h-48 rounded-lg border border-[var(--border)]">
-                                                <table className="data-table text-xs">
-                                                    <thead>
-                                                        <tr>
-                                                            {preview.headers.map((h, i) => (
-                                                                <th key={i} className="whitespace-nowrap">{h}</th>
-                                                            ))}
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {preview.rows.map((row, ri) => (
-                                                            <tr key={ri}>
-                                                                {row.map((cell, ci) => (
-                                                                    <td key={ci} className="whitespace-nowrap">{cell}</td>
-                                                                ))}
-                                                            </tr>
+                            {/* Preview */}
+                            {preview && previewTab && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">
+                                        Preview: {previewTab.name} (first {preview.rows.length} rows)
+                                    </label>
+                                    <div className="overflow-x-auto max-h-48 rounded-lg border border-[var(--border)]">
+                                        <table className="data-table text-xs">
+                                            <thead>
+                                                <tr>
+                                                    {preview.headers.map((h, i) => (
+                                                        <th key={i} className="whitespace-nowrap">{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {preview.rows.map((row, ri) => (
+                                                    <tr key={ri}>
+                                                        {row.map((cell, ci) => (
+                                                            <td key={ci} className="whitespace-nowrap">{cell}</td>
                                                         ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Column Mappings Suggestion */}
-                                    {selectedTab.headers.length > 0 && (
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2">Detected Columns</label>
-                                            <div className="flex flex-wrap gap-2">
-                                                {suggestMappings(selectedTab.headers).slice(0, 10).map((mapping, i) => (
-                                                    <span
-                                                        key={i}
-                                                        className={`badge ${mapping.confidence === 'high' ? 'badge-success' :
-                                                            mapping.confidence === 'medium' ? 'badge-warning' : 'badge-primary'
-                                                            }`}
-                                                    >
-                                                        {mapping.source} → {mapping.target}
-                                                    </span>
+                                                    </tr>
                                                 ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             )}
                         </div>
 
@@ -343,17 +443,20 @@ export default function DataSourcesPage() {
                                 Cancel
                             </button>
                             <button
-                                onClick={handleAdd}
-                                disabled={!selectedTab || adding}
-                                className="btn-primary"
+                                onClick={handleAddAll}
+                                disabled={selectedTabs.length === 0 || adding}
+                                className="btn-primary flex items-center gap-2"
                             >
                                 {adding ? (
                                     <>
-                                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                        <Loader2 className="w-4 h-4 animate-spin" />
                                         Adding...
                                     </>
                                 ) : (
-                                    'Add Source'
+                                    <>
+                                        <Plus className="w-4 h-4" />
+                                        Add {selectedTabs.length} Source{selectedTabs.length !== 1 ? 's' : ''}
+                                    </>
                                 )}
                             </button>
                         </div>
@@ -389,95 +492,134 @@ export default function DataSourcesPage() {
                 </div>
             )}
 
-            {/* Sources List */}
+            {/* Sources List - Grouped by Sheet */}
             {!isLoading && sources.length > 0 && (
-                <div className="grid gap-4">
-                    {sources.map((source) => {
-                        const platform = PLATFORMS.find(p => p.value === source.platform);
+                <div className="space-y-4">
+                    {Object.entries(groupedSources).map(([sheetId, groupSources]) => {
+                        const isCollapsed = collapsedGroups.has(sheetId);
+                        const firstSource = groupSources[0];
+                        const sheetName = firstSource.sheet_url.split('/d/')[1]?.split('/')[0] || sheetId;
 
                         return (
-                            <div
-                                key={source.id}
-                                className={`glass rounded-xl p-6 ${!source.is_active ? 'opacity-60' : ''}`}
-                            >
-                                <div className="flex items-start justify-between">
-                                    <div className="flex items-start gap-4">
-                                        <div
-                                            className="w-12 h-12 rounded-xl flex items-center justify-center"
-                                            style={{ background: `${platform?.color || '#8B5CF6'}20` }}
-                                        >
-                                            <FileSpreadsheet
-                                                className="w-6 h-6"
-                                                style={{ color: platform?.color || '#8B5CF6' }}
-                                            />
+                            <div key={sheetId} className="glass rounded-xl overflow-hidden">
+                                {/* Group Header */}
+                                <div
+                                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-[var(--bg-secondary)]/50 transition-colors"
+                                    onClick={() => toggleGroupCollapse(sheetId)}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        {isCollapsed ? (
+                                            <ChevronRight className="w-5 h-5 text-[var(--text-muted)]" />
+                                        ) : (
+                                            <ChevronDown className="w-5 h-5 text-[var(--text-muted)]" />
+                                        )}
+                                        <div className="w-10 h-10 rounded-lg bg-[var(--primary)]/20 flex items-center justify-center">
+                                            <Layers className="w-5 h-5 text-[var(--primary)]" />
                                         </div>
                                         <div>
-                                            <h3 className="font-semibold text-lg">{source.name}</h3>
-                                            <div className="flex items-center gap-3 mt-1">
-                                                <span
-                                                    className="badge"
-                                                    style={{
-                                                        background: `${platform?.color || '#8B5CF6'}20`,
-                                                        color: platform?.color || '#8B5CF6'
-                                                    }}
-                                                >
-                                                    {platform?.label || source.platform}
-                                                </span>
-                                                <span className={`badge ${source.data_type === 'ads' ? 'badge-primary' : 'badge-success'}`}>
-                                                    {source.data_type === 'ads' ? 'Ads' : 'Sales'}
-                                                </span>
-                                                {source.tab_name && (
-                                                    <span className="text-sm text-[var(--text-muted)]">
-                                                        Tab: {source.tab_name}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {source.last_synced_at && (
-                                                <p className="text-xs text-[var(--text-muted)] mt-2">
-                                                    Last synced: {new Date(source.last_synced_at).toLocaleString()}
-                                                </p>
-                                            )}
+                                            <h3 className="font-semibold">Google Sheet</h3>
+                                            <p className="text-xs text-[var(--text-muted)]">
+                                                {groupSources.length} tab{groupSources.length !== 1 ? 's' : ''} connected
+                                            </p>
                                         </div>
                                     </div>
-
                                     <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => handleSyncOne(source.id)}
-                                            disabled={isSyncing}
-                                            className="btn-secondary p-2"
-                                            title="Sync this source"
-                                        >
-                                            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                                        </button>
-                                        <button
-                                            onClick={() => toggleActive(source.id)}
-                                            className="btn-secondary p-2"
-                                            title={source.is_active ? 'Disable' : 'Enable'}
-                                        >
-                                            {source.is_active ? (
-                                                <Eye className="w-4 h-4" />
-                                            ) : (
-                                                <EyeOff className="w-4 h-4" />
-                                            )}
-                                        </button>
                                         <a
-                                            href={source.sheet_url}
+                                            href={firstSource.sheet_url}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="btn-secondary p-2"
                                             title="Open in Google Sheets"
+                                            onClick={e => e.stopPropagation()}
                                         >
                                             <ExternalLink className="w-4 h-4" />
                                         </a>
-                                        <button
-                                            onClick={() => handleDelete(source.id)}
-                                            className="btn-secondary p-2 text-red-500 hover:bg-red-500/10"
-                                            title="Delete"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
                                     </div>
                                 </div>
+
+                                {/* Group Items */}
+                                {!isCollapsed && (
+                                    <div className="border-t border-[var(--border)]">
+                                        {groupSources.map((source) => {
+                                            const platform = PLATFORMS.find(p => p.value === source.platform);
+
+                                            return (
+                                                <div
+                                                    key={source.id}
+                                                    className={`flex items-center justify-between p-4 border-b border-[var(--border)] last:border-b-0 ${!source.is_active ? 'opacity-60' : ''}`}
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div
+                                                            className="w-10 h-10 rounded-lg flex items-center justify-center"
+                                                            style={{ background: `${platform?.color || '#8B5CF6'}20` }}
+                                                        >
+                                                            <FileSpreadsheet
+                                                                className="w-5 h-5"
+                                                                style={{ color: platform?.color || '#8B5CF6' }}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-medium">{source.name}</h4>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <span
+                                                                    className="badge text-xs"
+                                                                    style={{
+                                                                        background: `${platform?.color || '#8B5CF6'}20`,
+                                                                        color: platform?.color || '#8B5CF6'
+                                                                    }}
+                                                                >
+                                                                    {platform?.label || source.platform}
+                                                                </span>
+                                                                <span className={`badge text-xs ${source.data_type === 'ads' ? 'badge-primary' : 'badge-success'}`}>
+                                                                    {source.data_type === 'ads' ? 'Ads' : 'Sales'}
+                                                                </span>
+                                                                {source.tab_name && (
+                                                                    <span className="text-xs text-[var(--text-muted)]">
+                                                                        Tab: {source.tab_name}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            {source.last_synced_at && (
+                                                                <p className="text-xs text-[var(--text-muted)] mt-1">
+                                                                    Last synced: {new Date(source.last_synced_at).toLocaleString()}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={() => handleSyncOne(source.id)}
+                                                            disabled={isSyncing}
+                                                            className="btn-secondary p-2"
+                                                            title="Sync this source"
+                                                        >
+                                                            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => toggleActive(source.id)}
+                                                            className="btn-secondary p-2"
+                                                            title={source.is_active ? 'Disable' : 'Enable'}
+                                                        >
+                                                            {source.is_active ? (
+                                                                <Eye className="w-4 h-4" />
+                                                            ) : (
+                                                                <EyeOff className="w-4 h-4" />
+                                                            )}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDelete(source.id)}
+                                                            className="btn-secondary p-2 text-red-500 hover:bg-red-500/10"
+                                                            title="Delete"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
